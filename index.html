@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="VeeTrack">
+<title>VeeTrack</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --red:#c0392b;--red-light:#fdf2f1;--red-mid:#e74c3c;
+  --green:#27ae60;--green-light:#eafaf1;
+  --amber:#e67e22;--amber-light:#fef9f0;
+  --blue:#2980b9;--blue-light:#eaf4fb;
+  --gray:#7f8c8d;--gray-light:#f4f6f7;--gray-mid:#ecf0f1;
+  --text:#2c3e50;--text-mid:#5d6d7e;--text-soft:#95a5a6;
+  --border:#dde1e7;--surface:#ffffff;--bg:#f0f2f5;
+  --topbar-h:54px;
+}
+
+html,body{height:100%;overflow:hidden;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text)}
+
+/* ── SCREENS ── */
+#screen-map, #screen-detail{
+  position:fixed;inset:0;
+  display:flex;flex-direction:column;
+  transition:opacity .22s, transform .22s;
+}
+#screen-detail{
+  transform:translateX(100%);
+  opacity:0;
+  pointer-events:none;
+  z-index:100;
+}
+#screen-detail.active{
+  transform:translateX(0);
+  opacity:1;
+  pointer-events:all;
+}
+
+/* ── TOPBAR ── */
+.topbar{
+  height:var(--topbar-h);
+  background:var(--red);
+  display:flex;align-items:center;
+  padding:0 18px;gap:14px;
+  flex-shrink:0;
+  box-shadow:0 2px 8px rgba(0,0,0,0.15);
+}
+.topbar-logo{
+  font-size:16px;font-weight:700;letter-spacing:.1em;
+  color:#fff;
+}
+.topbar-logo span{font-weight:300;opacity:.8}
+.topbar-sep{width:1px;height:20px;background:rgba(255,255,255,.25)}
+.topbar-location{font-size:12px;color:rgba(255,255,255,.8)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.topbar-pill{
+  font-size:11px;padding:4px 11px;border-radius:20px;font-weight:500;
+  background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);
+  color:#fff;
+}
+.topbar-pill.alert-pill{
+  background:rgba(255,255,255,.12);
+  border-color:rgba(255,255,255,.2);
+  color:rgba(255,255,255,.85);
+  cursor:pointer;
+}
+.topbar-clock{font-size:12px;color:rgba(255,255,255,.7);font-family:'DM Mono',monospace}
+
+.topbar-back{
+  background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.25);
+  color:#fff;font-size:13px;font-weight:500;font-family:'Inter',sans-serif;
+  padding:6px 14px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:6px;
+}
+
+/* ── MAP SCREEN LAYOUT ── */
+#map-layout{
+  flex:1;display:flex;overflow:hidden;
+}
+
+/* ── SIDEBAR NAV ── */
+#sidenav{
+  width:52px;flex-shrink:0;
+  background:#fff;border-right:1px solid var(--border);
+  display:flex;flex-direction:column;align-items:center;
+  padding:10px 0;gap:2px;
+}
+.snav-item{
+  width:38px;height:38px;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--gray);font-size:16px;transition:all .15s;
+  position:relative;
+}
+.snav-item:hover{background:var(--gray-light);color:var(--text)}
+.snav-item.active{background:var(--red-light);color:var(--red)}
+.snav-sep{width:26px;height:1px;background:var(--border);margin:4px 0}
+.snav-spacer{flex:1}
+.snav-badge{
+  position:absolute;top:4px;right:4px;width:7px;height:7px;
+  border-radius:50%;background:var(--red);border:1.5px solid #fff;
+}
+
+/* ── MAP AREA ── */
+#map-area{flex:1;position:relative;overflow:hidden}
+#map{width:100%;height:100%}
+.leaflet-container{background:#c8dfc0}
+.leaflet-control-zoom{display:none}
+.leaflet-control-attribution{font-size:9px;opacity:.3}
+.lf-icon{background:none!important;border:none!important}
+
+/* ── COW STRIP (bottom) ── */
+#cow-strip{
+  position:absolute;bottom:0;left:0;right:0;z-index:300;
+  background:rgba(255,255,255,.97);
+  border-top:1px solid var(--border);
+  backdrop-filter:blur(8px);
+}
+#cow-strip-header{
+  padding:8px 14px 0;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.strip-label{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-soft)}
+.strip-toggle{font-size:11px;color:var(--red);cursor:pointer;font-weight:500}
+
+#cow-strip-list{
+  display:flex;overflow-x:auto;padding:8px 10px 10px;gap:7px;
+  scrollbar-width:none;
+}
+#cow-strip-list::-webkit-scrollbar{display:none}
+
+.cow-chip{
+  flex-shrink:0;
+  display:flex;flex-direction:column;align-items:center;
+  padding:7px 10px;border-radius:10px;
+  background:var(--gray-light);border:1.5px solid transparent;
+  cursor:pointer;transition:all .15s;min-width:58px;
+}
+.cow-chip:hover{background:#fff;border-color:var(--border);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.cow-chip.selected{background:#fff;border-color:var(--red);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.cow-chip.alert-chip{background:var(--red-light);border-color:rgba(192,57,43,.2)}
+.cow-chip.warn-chip{background:var(--amber-light);border-color:rgba(230,126,34,.2)}
+
+.chip-dot{width:8px;height:8px;border-radius:50%;margin-bottom:5px}
+.chip-num{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;color:var(--text)}
+.chip-name{font-size:9px;color:var(--text-soft);margin-top:1px}
+
+/* ── DETAIL SCREEN ── */
+#screen-detail{background:var(--bg)}
+
+.detail-body{
+  flex:1;overflow-y:auto;
+  padding:16px;
+  display:flex;flex-direction:column;gap:14px;
+}
+
+/* CowManager-style cards */
+.cm-card{
+  background:#fff;border-radius:10px;
+  border:1px solid var(--border);
+  overflow:hidden;
+}
+.cm-card-header{
+  padding:12px 16px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;
+}
+.cm-card-icon{font-size:18px}
+.cm-card-title{font-size:13px;font-weight:600;color:var(--text)}
+.cm-card-subtitle{font-size:11px;color:var(--text-soft);margin-left:auto}
+.cm-card-body{padding:14px 16px}
+
+/* Cow identity header card */
+.cow-header-card{
+  background:var(--red);border-radius:10px;
+  padding:16px;display:flex;align-items:center;gap:14px;
+  color:#fff;
+}
+.cow-header-avatar{
+  width:52px;height:52px;border-radius:12px;
+  background:rgba(255,255,255,.2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:26px;flex-shrink:0;
+}
+.cow-header-avatar.ok{background:rgba(39,174,96,.25)}
+.cow-header-avatar.warn{background:rgba(230,126,34,.25)}
+.cow-header-name{font-size:20px;font-weight:700;letter-spacing:-.01em}
+.cow-header-id{font-size:12px;opacity:.8;margin-top:2px;font-family:'DM Mono',monospace}
+.cow-header-status{
+  margin-left:auto;font-size:11px;font-weight:600;
+  padding:5px 12px;border-radius:20px;
+  background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);
+  color:#fff;
+}
+
+/* Stat grid */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)}
+.stat-cell{
+  background:#fff;padding:12px 14px;
+}
+.stat-cell.full{grid-column:1/-1}
+.stat-label{font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text-soft);margin-bottom:5px}
+.stat-value{font-size:18px;font-weight:700;color:var(--text);font-family:'DM Mono',monospace}
+.stat-value.big{font-size:22px}
+.stat-value.red{color:var(--red)}
+.stat-value.green{color:var(--green)}
+.stat-value.amber{color:var(--amber)}
+.stat-unit{font-size:11px;font-weight:400;color:var(--text-soft);margin-left:3px}
+
+/* Bar */
+.bar-wrap{height:5px;background:var(--gray-mid);border-radius:3px;margin-top:8px}
+.bar-fill{height:5px;border-radius:3px}
+
+/* Alert notice */
+.notice{
+  border-radius:8px;padding:11px 13px;
+  font-size:12px;line-height:1.55;
+  display:flex;gap:10px;align-items:flex-start;
+}
+.notice.red{background:var(--red-light);color:#922b21;border:1px solid rgba(192,57,43,.15)}
+.notice.amber{background:var(--amber-light);color:#935116;border:1px solid rgba(230,126,34,.15)}
+.notice-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.notice-text strong{display:block;font-weight:600;margin-bottom:3px;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+
+/* Row list inside card */
+.data-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:9px 0;border-bottom:1px solid var(--gray-mid);
+}
+.data-row:last-child{border-bottom:none;padding-bottom:0}
+.data-row-label{font-size:12px;color:var(--text-mid)}
+.data-row-value{font-size:12px;font-weight:600;color:var(--text);font-family:'DM Mono',monospace}
+
+/* Bar chart mini */
+.mini-bars{display:flex;align-items:flex-end;gap:3px;height:40px;padding-top:4px}
+.mini-bar{flex:1;background:var(--gray-mid);border-radius:3px 3px 0 0;min-width:6px}
+.mini-bar.today{background:var(--red)}
+
+/* Action buttons */
+.action-row{display:flex;gap:9px;margin-top:2px}
+.action-btn{
+  flex:1;padding:11px;border-radius:9px;
+  font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
+  cursor:pointer;border:1.5px solid var(--border);
+  background:#fff;color:var(--text);transition:all .15s;
+}
+.action-btn:hover{background:var(--gray-light)}
+.action-btn.primary{background:var(--red);border-color:var(--red);color:#fff}
+.action-btn.primary:hover{background:#a93226}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     SCREEN 1: MAP
+════════════════════════════════════════ -->
+<div id="screen-map">
+  <div class="topbar">
+    <div class="topbar-logo">VEE<span>TRACK</span></div>
+    <div class="topbar-right">
+      <span class="topbar-pill">● 20 actief</span>
+      <span class="topbar-pill alert-pill" onclick="focusCow(312)">⚠ #312</span>
+      <span class="topbar-clock" id="clock">--:--</span>
+    </div>
+  </div>
+
+  <div id="map-layout">
+    <div id="sidenav">
+      <div class="snav-item active">🗺</div>
+      <div class="snav-item" style="position:relative">🐄<span class="snav-badge"></span></div>
+      <div class="snav-sep"></div>
+      <div class="snav-item">📊</div>
+      <div class="snav-item">🌾</div>
+      <div class="snav-spacer"></div>
+      <div class="snav-sep"></div>
+      <div class="snav-item">⚙</div>
+    </div>
+
+    <div id="map-area">
+      <div id="map"></div>
+<!-- COW STRIP -->
+      <div id="cow-strip">
+        <div id="cow-strip-header">
+          <span class="strip-label">20 dieren · Wei A</span>
+          <span class="strip-toggle" onclick="toggleStrip()">Verbergen ▾</span>
+        </div>
+        <div id="cow-strip-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCREEN 2: DETAIL
+════════════════════════════════════════ -->
+<div id="screen-detail">
+  <div class="topbar">
+    <button class="topbar-back" onclick="goBack()">← Terug</button>
+    <div class="topbar-sep"></div>
+    <div class="topbar-logo" id="detail-topbar-title">—</div>
+    <div class="topbar-right">
+      <span class="topbar-clock" id="clock2">--:--</span>
+    </div>
+  </div>
+  <div class="detail-body" id="detail-body"></div>
+</div>
+
+<script>
+const FARM=[52.37875,6.52820];
+const COWS=[
+  {id:312,name:'Nova',  lat:52.37935,lng:6.52760,status:'alert',act:12, rum:'Afwezig',moved:'14:03',weight:612,age:'5 jaar',calves:3,milk:18.2,temp:38.9},
+  {id:301,name:'Roos',  lat:52.37965,lng:6.52845,status:'ok',   act:84, rum:'Normaal',moved:'16:24',weight:588,age:'4 jaar',calves:2,milk:24.1,temp:38.5},
+  {id:302,name:'Lente', lat:52.37982,lng:6.52800,status:'ok',   act:89, rum:'Normaal',moved:'16:21',weight:571,age:'3 jaar',calves:1,milk:22.7,temp:38.4},
+  {id:303,name:'Dina',  lat:52.37972,lng:6.52875,status:'ok',   act:77, rum:'Normaal',moved:'16:18',weight:603,age:'6 jaar',calves:4,milk:26.3,temp:38.6},
+  {id:304,name:'Beeke', lat:52.37952,lng:6.52912,status:'ok',   act:91, rum:'Normaal',moved:'16:25',weight:556,age:'3 jaar',calves:1,milk:21.4,temp:38.3},
+  {id:305,name:'Fenne', lat:52.37992,lng:6.52942,status:'ok',   act:85, rum:'Normaal',moved:'16:20',weight:579,age:'4 jaar',calves:2,milk:23.8,temp:38.5},
+  {id:306,name:'Griet', lat:52.38012,lng:6.52855,status:'ok',   act:78, rum:'Normaal',moved:'16:22',weight:594,age:'5 jaar',calves:3,milk:25.1,temp:38.6},
+  {id:307,name:'Hilde', lat:52.38022,lng:6.52782,status:'ok',   act:93, rum:'Normaal',moved:'16:26',weight:561,age:'3 jaar',calves:1,milk:20.9,temp:38.4},
+  {id:308,name:'Iris',  lat:52.38002,lng:6.52722,status:'warn', act:54, rum:'Laag',   moved:'15:52',weight:587,age:'4 jaar',calves:2,milk:19.3,temp:38.7},
+  {id:309,name:'Janna', lat:52.37947,lng:6.52702,status:'ok',   act:82, rum:'Normaal',moved:'16:19',weight:569,age:'3 jaar',calves:1,milk:22.0,temp:38.4},
+  {id:310,name:'Kaatje',lat:52.37922,lng:6.52752,status:'ok',   act:88, rum:'Normaal',moved:'16:23',weight:601,age:'6 jaar',calves:4,milk:27.4,temp:38.5},
+  {id:311,name:'Lies',  lat:52.37912,lng:6.52822,status:'ok',   act:75, rum:'Normaal',moved:'16:17',weight:576,age:'4 jaar',calves:2,milk:23.5,temp:38.5},
+  {id:313,name:'Mina',  lat:52.37932,lng:6.52882,status:'ok',   act:86, rum:'Normaal',moved:'16:24',weight:583,age:'5 jaar',calves:3,milk:24.6,temp:38.6},
+  {id:314,name:'Noor',  lat:52.37917,lng:6.52932,status:'ok',   act:79, rum:'Normaal',moved:'16:20',weight:558,age:'3 jaar',calves:1,milk:21.1,temp:38.3},
+  {id:315,name:'Ot',    lat:52.37962,lng:6.52972,status:'ok',   act:92, rum:'Normaal',moved:'16:25',weight:572,age:'4 jaar',calves:2,milk:23.2,temp:38.4},
+  {id:316,name:'Pien',  lat:52.38032,lng:6.52912,status:'ok',   act:83, rum:'Normaal',moved:'16:22',weight:595,age:'5 jaar',calves:3,milk:25.8,temp:38.6},
+  {id:317,name:'Riet',  lat:52.38017,lng:6.52972,status:'ok',   act:87, rum:'Normaal',moved:'16:23',weight:567,age:'3 jaar',calves:1,milk:20.6,temp:38.4},
+  {id:318,name:'Sara',  lat:52.37902,lng:6.52862,status:'ok',   act:76, rum:'Normaal',moved:'16:18',weight:591,age:'5 jaar',calves:3,milk:24.9,temp:38.5},
+  {id:319,name:'Tine',  lat:52.37897,lng:6.52792,status:'ok',   act:90, rum:'Normaal',moved:'16:26',weight:563,age:'4 jaar',calves:2,milk:22.3,temp:38.4},
+  {id:320,name:'Uut',   lat:52.37907,lng:6.52712,status:'ok',   act:81, rum:'Normaal',moved:'16:21',weight:578,age:'3 jaar',calves:1,milk:21.7,temp:38.3},
+];
+
+// Clock
+function tick(){
+  const t=new Date(),s=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+  document.getElementById('clock').textContent=s;
+  document.getElementById('clock2').textContent=s;
+}
+tick();setInterval(tick,15000);
+
+// Map
+const map=L.map('map',{center:FARM,zoom:18,zoomControl:false});
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+
+function makeIcon(cow){
+  const a=cow.status==='alert',w=cow.status==='warn';
+  const col=a?'#c0392b':w?'#e67e22':'#2980b9';
+  const r=a?11:9;
+  // Soft pulse ring on all markers, faster/stronger for alert
+  const dur=a?'1.8s':'3.5s';
+  const maxR=a?r*1.8:r*1.4;
+  const maxOp=a?0.5:0.25;
+  const pulse=`<circle r="${r*.5}" fill="none" stroke="${col}" stroke-width="1.2" opacity="0">
+    <animate attributeName="r" values="${r*.5};${maxR};${r*.5}" dur="${dur}" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="${maxOp};0;${maxOp}" dur="${dur}" repeatCount="indefinite"/>
+  </circle>`;
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${r*4}" height="${r*4}" viewBox="${-r*2} ${-r*2} ${r*4} ${r*4}">${pulse}<circle r="${r*.72}" fill="${col}" fill-opacity=".15"/><circle r="${r*.5}" fill="${col}" stroke="white" stroke-width="1.8"/><text y="3.5" text-anchor="middle" font-size="${a?8:7}" font-family="DM Mono,monospace" fill="white" font-weight="600">${cow.id}</text></svg>`;
+  return L.divIcon({html:svg,className:'lf-icon',iconSize:[r*4,r*4],iconAnchor:[r*2,r*2]});
+}
+
+const markerMap={};
+COWS.forEach(cow=>{
+  const m=L.marker([cow.lat,cow.lng],{icon:makeIcon(cow)});
+  m.addTo(map);
+  m.on('click',()=>openDetail(cow.id));
+  markerMap[cow.id]={marker:m, baseLat:cow.lat, baseLng:cow.lng, cow:cow,
+    phase:Math.random()*Math.PI*2, speed:0.3+Math.random()*0.4};
+});
+
+// Wander: each cow drifts slowly around its base position
+function wanderCows(){
+  const t=Date.now()/1000;
+  Object.values(markerMap).forEach(({marker,baseLat,baseLng,cow,phase,speed})=>{
+    // Skip very sick cow (312) - barely moves
+    const range = cow.status==='alert' ? 0.000008 : 0.00004;
+    const lat=baseLat + Math.sin(t*speed+phase)*range;
+    const lng=baseLng + Math.cos(t*speed*0.7+phase+1)*range*1.3;
+    marker.setLatLng([lat,lng]);
+  });
+  requestAnimationFrame(wanderCows);
+}
+wanderCows();
+
+// Cow strip
+const sorted=[...COWS].sort((a,b)=>({alert:0,warn:1,ok:2}[a.status]-{alert:0,warn:1,ok:2}[b.status]));
+const stripEl=document.getElementById('cow-strip-list');
+sorted.forEach(cow=>{
+  const el=document.createElement('div');
+  const cls=cow.status==='alert'?'alert-chip':cow.status==='warn'?'warn-chip':'';
+  el.className=`cow-chip ${cls}`;
+  el.id='chip-'+cow.id;
+  el.onclick=()=>openDetail(cow.id);
+  const col=cow.status==='alert'?'#c0392b':cow.status==='warn'?'#e67e22':'#2980b9';
+  el.innerHTML=`<div class="chip-dot" style="background:${col}"></div><div class="chip-num">${cow.id}</div><div class="chip-name">${cow.name}</div>`;
+  stripEl.appendChild(el);
+});
+
+let stripOpen=true;
+function toggleStrip(){
+  stripOpen=!stripOpen;
+  stripEl.style.display=stripOpen?'flex':'none';
+  document.querySelector('.strip-toggle').textContent=stripOpen?'Verbergen ▾':'Tonen ▴';
+}
+
+// Navigation
+function goBack(){
+  document.getElementById('screen-detail').classList.remove('active');
+}
+
+function openDetail(id){
+  const cow=COWS.find(c=>c.id===id);if(!cow)return;
+
+  // Highlight chip
+  document.querySelectorAll('.cow-chip').forEach(c=>c.classList.remove('selected'));
+  document.getElementById('chip-'+id)?.classList.add('selected');
+  map.panTo([cow.lat,cow.lng],{animate:true,duration:.4});
+
+  // Build detail page
+  document.getElementById('detail-topbar-title').textContent=cow.name+' · #'+cow.id;
+
+  const ac=cow.act<30?'red':cow.act<60?'amber':'green';
+  const bc=cow.act<30?'#c0392b':cow.act<60?'#e67e22':'#27ae60';
+  const rc=cow.rum==='Afwezig'?'red':cow.rum==='Laag'?'amber':'green';
+  const stcls=cow.status==='alert'?'red':cow.status==='warn'?'amber':'green';
+  const stlbl=cow.status==='alert'?'Alarm':cow.status==='warn'?'Let op':'Actief';
+  const tc=cow.temp>38.7?'red':cow.temp>38.6?'amber':'green';
+
+  let notice='';
+  if(cow.status==='alert') notice=`<div class="notice red"><div class="notice-icon">⚠</div><div class="notice-text"><strong>Melding — directe controle</strong>Lage activiteit gedetecteerd. Koe beweegt nauwelijks en vertoont geen herkauwen. Laatste beweging om ${cow.moved}.</div></div>`;
+  else if(cow.status==='warn') notice=`<div class="notice amber"><div class="notice-icon">⚠</div><div class="notice-text"><strong>Let op</strong>Herkauwen lager dan normaal de afgelopen 2 uur. Observeer de komende uren.</div></div>`;
+
+  // Fake week activity bars
+  const days=['Ma','Di','Wo','Do','Vr','Za','Zo'];
+  const vals=cow.status==='alert'?[82,78,75,71,60,42,12]:[80,85,88,82,86,83,cow.act];
+  const maxV=Math.max(...vals);
+  const bars=days.map((d,i)=>`<div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:3px">
+    <div class="mini-bar${i===6?' today':''}" style="height:${Math.round(vals[i]/maxV*36)}px"></div>
+    <span style="font-size:9px;color:var(--text-soft)">${d}</span>
+  </div>`).join('');
+
+  document.getElementById('detail-body').innerHTML=`
+    <!-- Identity -->
+    <div class="cow-header-card" style="${cow.status==='alert'?'':'background:var(--blue)'}">
+      <div class="cow-header-avatar ${cow.status}">🐄</div>
+      <div>
+        <div class="cow-header-name">${cow.name}</div>
+        <div class="cow-header-id">#${cow.id} · Wei A, Noord-sector</div>
+      </div>
+      <div class="cow-header-status">${stlbl}</div>
+    </div>
+
+    ${notice}
+
+    <!-- Activiteit -->
+    <div class="cm-card">
+      <div class="cm-card-header">
+        <span class="cm-card-icon">📊</span>
+        <span class="cm-card-title">Activiteit & beweging</span>
+        <span class="cm-card-subtitle">Vandaag</span>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-cell">
+          <div class="stat-label">Activiteit</div>
+          <div class="stat-value ${ac}">${cow.act}<span class="stat-unit">%</span></div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${cow.act}%;background:${bc}"></div></div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Herkauwen</div>
+          <div class="stat-value ${rc}" style="font-size:15px">${cow.rum}</div>
+        </div>
+        <div class="stat-cell full">
+          <div class="stat-label">Activiteit afgelopen 7 dagen</div>
+          <div class="mini-bars">${bars}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gezondheid -->
+    <div class="cm-card">
+      <div class="cm-card-header">
+        <span class="cm-card-icon">🩺</span>
+        <span class="cm-card-title">Gezondheid</span>
+        <span class="cm-card-subtitle">Realtime</span>
+      </div>
+      <div class="cm-card-body">
+        <div class="data-row">
+          <span class="data-row-label">Lichaamstemperatuur</span>
+          <span class="data-row-value" style="color:var(--${tc})">${cow.temp.toFixed(1)} °C</span>
+        </div>
+        <div class="data-row">
+          <span class="data-row-label">Laatste beweging</span>
+          <span class="data-row-value">${cow.moved}</span>
+        </div>
+        <div class="data-row">
+          <span class="data-row-label">Melkproductie gisteren</span>
+          <span class="data-row-value">${cow.milk.toFixed(1)} L</span>
+        </div>
+        <div class="data-row">
+          <span class="data-row-label">Perceel</span>
+          <span class="data-row-value">Wei A</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Diergegevens -->
+    <div class="cm-card">
+      <div class="cm-card-header">
+        <span class="cm-card-icon">🏷</span>
+        <span class="cm-card-title">Diergegevens</span>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-cell">
+          <div class="stat-label">Gewicht</div>
+          <div class="stat-value">${cow.weight}<span class="stat-unit">kg</span></div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Leeftijd</div>
+          <div class="stat-value" style="font-size:15px">${cow.age}</div>
+        </div>
+        <div class="stat-cell full">
+          <div class="stat-label">Kalveren</div>
+          <div class="stat-value">${cow.calves}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acties -->
+    <div class="action-row">
+      <button class="action-btn primary">Notitie toevoegen</button>
+      <button class="action-btn">Geschiedenis</button>
+      <button class="action-btn">Melding sluiten</button>
+    </div>
+  `;
+
+  document.getElementById('screen-detail').classList.add('active');
+}
+
+function focusCow(id){
+  openDetail(id);
+  const cow=COWS.find(c=>c.id===id);
+  if(cow)map.flyTo([cow.lat,cow.lng],18,{duration:1});
+  setTimeout(()=>document.getElementById('chip-'+id)?.scrollIntoView({behavior:'smooth',inline:'center'}),300);
+}
+
+setTimeout(()=>focusCow(312),800);
+</script>
+</body>
+</html>
