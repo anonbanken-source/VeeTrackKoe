@@ -1,7 +1,7 @@
 {
   "name": "VeeTrack",
   "short_name": "VeeTrack",
-  "start_url": "/veetrack/",
+  "start_url": "/VeeTrackKoe/",
   "display": "standalone",
   "background_color": "#c0392b",
   "theme_color": "#c0392b",
